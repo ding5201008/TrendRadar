@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
+import paho.mqtt.client as mqtt  # 新增：MQTT 库
 
 from .batch import add_batch_headers, get_max_batch_header_size
 from .formatters import convert_markdown_to_mrkdwn, strip_markdown
@@ -46,19 +47,38 @@ def _render_ai_analysis(ai_analysis: Any, channel: str) -> str:
         return ""
 
 
-# ========== 新增：发送到 ESP32 ==========
+# ========== 修改后的 send_to_esp32：使用 MQTT ==========
 def send_to_esp32(content: str, batch_info: str = ""):
-    """向 ESP32 发送文本内容"""
-    esp32_url = "http://192.168.31.69:80/push"  # 请替换为实际的 IP
+    """通过公共 MQTT 服务器向 ESP32 发送文本内容"""
+    # MQTT Broker 配置
+    mqtt_broker = "test.mosquitto.org"
+    mqtt_port = 1883
+    mqtt_topic = "trendradar/esp32"   # 必须与 ESP32 订阅的主题一致
+
+    print(f"[MQTT] 准备发送，Broker: {mqtt_broker}, 主题: {mqtt_topic}, 内容长度: {len(content)} {batch_info}")
+    print(f"[MQTT] 内容预览: {content[:100]}...")
+
     try:
-        response = requests.post(esp32_url, data=content, timeout=3)
-        if response.status_code == 200:
-            print(f"ESP32 接收成功 {batch_info}")
+        # 创建 MQTT 客户端
+        client = mqtt.Client()
+        
+        # 连接到 Broker (设置一个较短的连接超时)
+        client.connect(mqtt_broker, mqtt_port, 60)
+        
+        # 发布消息
+        result = client.publish(mqtt_topic, content)
+        status = result.rc
+        if status == mqtt.MQTT_ERR_SUCCESS:
+            print(f"[MQTT] 消息发布成功 {batch_info}")
         else:
-            print(f"ESP32 返回错误码: {response.status_code} {batch_info}")
+            print(f"[MQTT] 消息发布失败，错误码: {status} {batch_info}")
+        
+        # 断开连接
+        client.disconnect()
+        
     except Exception as e:
-        print(f"向 ESP32 发送失败 {batch_info}: {e}")
-# ========== 新增结束 ==========
+        print(f"[MQTT] 发送异常: {e} {batch_info}")
+# ========== 修改结束 ==========
 
 
 # === SMTP 邮件配置 ===
@@ -181,6 +201,11 @@ def send_to_feishu(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         # 飞书 webhook 只显示 content.text，所有信息都整合到 text 中
         payload = {
             "msg_type": "text",
@@ -198,12 +223,6 @@ def send_to_feishu(
                 # 检查飞书的响应状态
                 if result.get("StatusCode") == 0 or result.get("code") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32 ==========
-                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -317,6 +336,11 @@ def send_to_dingtalk(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         payload = {
             "msgtype": "markdown",
             "markdown": {
@@ -333,12 +357,6 @@ def send_to_dingtalk(
                 result = response.json()
                 if result.get("errcode") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32 ==========
-                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -470,6 +488,11 @@ def send_to_wework(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         try:
             response = requests.post(
                 webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
@@ -478,12 +501,6 @@ def send_to_wework(
                 result = response.json()
                 if result.get("errcode") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32 ==========
-                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -596,6 +613,11 @@ def send_to_telegram(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         payload = {
             "chat_id": chat_id,
             "text": batch_content,
@@ -611,12 +633,6 @@ def send_to_telegram(
                 result = response.json()
                 if result.get("ok"):
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32 ==========
-                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -923,6 +939,11 @@ def send_to_ntfy(
             f"发送{log_prefix}第 {actual_batch_num}/{total_batches} 批次（推送顺序: {idx}/{total_batches}），大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         # 检查消息大小，确保不超过4KB
         if content_size > 4096:
             print(f"警告：{log_prefix}第 {actual_batch_num} 批次消息过大（{content_size} 字节），可能被拒绝")
@@ -943,12 +964,6 @@ def send_to_ntfy(
 
             if response.status_code == 200:
                 print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次发送成功 [{report_type}]")
-                
-                # ========== 新增：发送到 ESP32 ==========
-                batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
-                send_to_esp32(batch_content, batch_info)
-                # ========== 新增结束 ==========
-
                 success_count += 1
                 if idx < total_batches:
                     # 公共服务器建议 2-3 秒，自托管可以更短
@@ -969,12 +984,6 @@ def send_to_ntfy(
                 )
                 if retry_response.status_code == 200:
                     print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次重试成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32（重试成功）==========
-                    batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     success_count += 1
                 else:
                     print(
@@ -1122,6 +1131,11 @@ def send_to_bark(
             f"发送{log_prefix}第 {actual_batch_num}/{total_batches} 批次（推送顺序: {idx}/{total_batches}），大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         # 检查消息大小（Bark使用APNs，限制4KB）
         if content_size > 4096:
             print(
@@ -1150,12 +1164,6 @@ def send_to_bark(
                 result = response.json()
                 if result.get("code") == 200:
                     print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次发送成功 [{report_type}]")
-                    
-                    # ========== 新增：发送到 ESP32 ==========
-                    batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
-                    send_to_esp32(batch_content, batch_info)
-                    # ========== 新增结束 ==========
-
                     success_count += 1
                     # 批次间间隔
                     if idx < total_batches:
@@ -1283,6 +1291,11 @@ def send_to_slack(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         # 构建 Slack payload（使用简单的 text 字段，支持 mrkdwn）
         payload = {"text": mrkdwn_content}
 
@@ -1294,12 +1307,6 @@ def send_to_slack(
             # Slack Incoming Webhooks 成功时返回 "ok" 文本
             if response.status_code == 200 and response.text == "ok":
                 print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                
-                # ========== 新增：发送到 ESP32 ==========
-                batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                send_to_esp32(batch_content, batch_info)
-                # ========== 新增结束 ==========
-
                 # 批次间间隔
                 if i < len(batches):
                     time.sleep(batch_interval)
@@ -1411,6 +1418,11 @@ def send_to_generic_webhook(
             f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
         )
 
+        # ========== 新增：无论渠道成功与否，先发 ESP32 ==========
+        batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+        send_to_esp32(batch_content, batch_info)
+        # ====================================================
+
         try:
             # 构建 payload
             if payload_template:
@@ -1438,12 +1450,6 @@ def send_to_generic_webhook(
             
             if response.status_code >= 200 and response.status_code < 300:
                 print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
-                
-                # ========== 新增：发送到 ESP32 ==========
-                batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
-                send_to_esp32(batch_content, batch_info)
-                # ========== 新增结束 ==========
-
                 if i < len(batches):
                     time.sleep(batch_interval)
             else:
