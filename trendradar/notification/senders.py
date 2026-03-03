@@ -51,7 +51,7 @@ def _render_ai_analysis(ai_analysis: Any, channel: str) -> str:
 def send_to_esp32(content: str, batch_info: str = ""):
     """通过公共 MQTT 服务器向 ESP32 发送文本内容"""
     # MQTT Broker 配置
-    mqtt_broker = "test.mosquitto.org"
+    mqtt_broker = "broker.emqx.io"
     mqtt_port = 1883
     mqtt_topic = "trendradar/esp32"   # 必须与 ESP32 订阅的主题一致
 
