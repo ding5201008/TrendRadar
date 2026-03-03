@@ -46,6 +46,21 @@ def _render_ai_analysis(ai_analysis: Any, channel: str) -> str:
         return ""
 
 
+# ========== 新增：发送到 ESP32 ==========
+def send_to_esp32(content: str, batch_info: str = ""):
+    """向 ESP32 发送文本内容"""
+    esp32_url = "http://192.168.31.69:80/push"  # 请替换为实际的 IP
+    try:
+        response = requests.post(esp32_url, data=content, timeout=3)
+        if response.status_code == 200:
+            print(f"ESP32 接收成功 {batch_info}")
+        else:
+            print(f"ESP32 返回错误码: {response.status_code} {batch_info}")
+    except Exception as e:
+        print(f"向 ESP32 发送失败 {batch_info}: {e}")
+# ========== 新增结束 ==========
+
+
 # === SMTP 邮件配置 ===
 SMTP_CONFIGS = {
     # Gmail（使用 STARTTLS）
@@ -183,6 +198,12 @@ def send_to_feishu(
                 # 检查飞书的响应状态
                 if result.get("StatusCode") == 0 or result.get("code") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32 ==========
+                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -312,6 +333,12 @@ def send_to_dingtalk(
                 result = response.json()
                 if result.get("errcode") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32 ==========
+                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -451,6 +478,12 @@ def send_to_wework(
                 result = response.json()
                 if result.get("errcode") == 0:
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32 ==========
+                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -578,6 +611,12 @@ def send_to_telegram(
                 result = response.json()
                 if result.get("ok"):
                     print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32 ==========
+                    batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     # 批次间间隔
                     if i < len(batches):
                         time.sleep(batch_interval)
@@ -904,6 +943,12 @@ def send_to_ntfy(
 
             if response.status_code == 200:
                 print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次发送成功 [{report_type}]")
+                
+                # ========== 新增：发送到 ESP32 ==========
+                batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
+                send_to_esp32(batch_content, batch_info)
+                # ========== 新增结束 ==========
+
                 success_count += 1
                 if idx < total_batches:
                     # 公共服务器建议 2-3 秒，自托管可以更短
@@ -924,6 +969,12 @@ def send_to_ntfy(
                 )
                 if retry_response.status_code == 200:
                     print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次重试成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32（重试成功）==========
+                    batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     success_count += 1
                 else:
                     print(
@@ -1099,6 +1150,12 @@ def send_to_bark(
                 result = response.json()
                 if result.get("code") == 200:
                     print(f"{log_prefix}第 {actual_batch_num}/{total_batches} 批次发送成功 [{report_type}]")
+                    
+                    # ========== 新增：发送到 ESP32 ==========
+                    batch_info = f"(批次 {actual_batch_num}/{total_batches} - {report_type})"
+                    send_to_esp32(batch_content, batch_info)
+                    # ========== 新增结束 ==========
+
                     success_count += 1
                     # 批次间间隔
                     if idx < total_batches:
@@ -1237,6 +1294,12 @@ def send_to_slack(
             # Slack Incoming Webhooks 成功时返回 "ok" 文本
             if response.status_code == 200 and response.text == "ok":
                 print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                
+                # ========== 新增：发送到 ESP32 ==========
+                batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                send_to_esp32(batch_content, batch_info)
+                # ========== 新增结束 ==========
+
                 # 批次间间隔
                 if i < len(batches):
                     time.sleep(batch_interval)
@@ -1375,6 +1438,12 @@ def send_to_generic_webhook(
             
             if response.status_code >= 200 and response.status_code < 300:
                 print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
+                
+                # ========== 新增：发送到 ESP32 ==========
+                batch_info = f"(批次 {i}/{len(batches)} - {report_type})"
+                send_to_esp32(batch_content, batch_info)
+                # ========== 新增结束 ==========
+
                 if i < len(batches):
                     time.sleep(batch_interval)
             else:
